@@ -1,4 +1,4 @@
-import numpy as np
+import jax.numpy as np
 
 from lenstronomy.Util.package_util import exporter
 export, __all__ = exporter()

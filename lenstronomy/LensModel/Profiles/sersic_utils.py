@@ -1,5 +1,5 @@
 import scipy.special as special
-import numpy as np
+import jax.numpy as np
 import scipy
 from lenstronomy.Util import param_util
 
@@ -189,21 +189,11 @@ class SersicUtil(object):
         :param max_R_frac: maximum window outside of which the mass is zeroed, in units of R_sersic (float)
         :return: kernel of the Sersic surface brightness at R
         """
-
+        # Must avoid item assignment on JAX arrays
         R_ = self._R_stable(R)
         R_sersic_ = self._R_stable(R_sersic)
         bn = self.b_n(n_sersic)
         R_frac = R_ / R_sersic_
-        #R_frac = R_frac.astype(np.float32)
-        if isinstance(R_, int) or isinstance(R_, float):
-            if R_frac > max_R_frac:
-                result = 0
-            else:
-                exponent = -bn * (R_frac ** (1. / n_sersic) - 1.)
-                result = np.exp(exponent)
-        else:
-            R_frac_real = R_frac[R_frac <= max_R_frac]
-            exponent = -bn * (R_frac_real ** (1. / n_sersic) - 1.)
-            result = np.zeros_like(R_)
-            result[R_frac <= max_R_frac] = np.exp(exponent)
+        good_inds = (np.asarray(R_frac) <= max_R_frac).astype(int)
+        result = good_inds * np.exp(-bn * (R_frac**(1. / n_sersic) - 1.))
         return np.nan_to_num(result)

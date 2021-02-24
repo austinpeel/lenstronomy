@@ -4,7 +4,7 @@ __author__ = 'Simon Birrer'
 this file contains standard routines
 """
 
-import numpy as np
+import jax.numpy as np
 import mpmath
 import itertools
 from lenstronomy.Util.numba_util import jit
@@ -585,30 +585,20 @@ def make_subgrid(ra_coord, dec_coord, subgrid_res=2):
     :param subgrid_res:
     :return:
     """
-    ra_array = array2image(ra_coord)
-    dec_array = array2image(dec_coord)
-    n = len(ra_array)
-    d_ra_x = ra_array[0][1] - ra_array[0][0]
-    d_ra_y = ra_array[1][0] - ra_array[0][0]
-    d_dec_x = dec_array[0][1] - dec_array[0][0]
-    d_dec_y = dec_array[1][0] - dec_array[0][0]
+    # With JAX we need to avoid array item assignment through indexing
 
-    ra_array_new = np.zeros((n * subgrid_res, n * subgrid_res))
-    dec_array_new = np.zeros((n * subgrid_res, n * subgrid_res))
-    for i in range(0, subgrid_res):
-        for j in range(0, subgrid_res):
-            ra_array_new[i::subgrid_res, j::subgrid_res] = ra_array + d_ra_x * (
-                        -1 / 2. + 1 / (2. * subgrid_res) + j / float(subgrid_res)) + d_ra_y * (
-                                                                       -1 / 2. + 1 / (2. * subgrid_res) + i / float(
-                                                                   subgrid_res))
-            dec_array_new[i::subgrid_res, j::subgrid_res] = dec_array + d_dec_x * (
-                        -1 / 2. + 1 / (2. * subgrid_res) + j / float(subgrid_res)) + d_dec_y * (
-                                                                        -1 / 2. + 1 / (2. * subgrid_res) + i / float(
-                                                                    subgrid_res))
+    ra = array2image(ra_coord)[0]  # First row containing all ra values
+    n_ra, ra_min, ra_max = len(ra), ra[0], ra[-1]
+    d_ra = (np.diff(ra)[0] / 2.) * (1. - 1. / subgrid_res)  # Desired spacing
+    ra_new = np.linspace(ra_min - d_ra, ra_max + d_ra, subgrid_res * n_ra)
 
-    ra_coords_sub = image2array(ra_array_new)
-    dec_coords_sub = image2array(dec_array_new)
-    return ra_coords_sub, dec_coords_sub
+    dec = array2image(dec_coord)[:, 0]  # First column containing all dec values
+    n_dec, dec_min, dec_max = len(dec), dec[0], dec[-1]
+    d_dec = (np.diff(dec)[0] / 2.) * (1. - 1. / subgrid_res)
+    dec_new = np.linspace(dec_min - d_dec, dec_max + d_dec, subgrid_res * n_dec)
+
+    ra_subgrid, dec_subgrid = np.meshgrid(ra_new, dec_new)
+    return image2array(ra_subgrid), image2array(dec_subgrid)
 
 
 @export

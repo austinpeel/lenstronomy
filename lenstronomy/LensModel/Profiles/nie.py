@@ -1,6 +1,6 @@
 __author__ = 'sibirrer'
 
-import numpy as np
+import jax.numpy as np
 import lenstronomy.Util.util as util
 import lenstronomy.Util.param_util as param_util
 from lenstronomy.LensModel.Profiles.base_profile import LensProfileBase
@@ -197,8 +197,7 @@ class NIEMajorAxis(LensProfileBase):
         """
         returns df/dx and df/dy of the function
         """
-        if q >= 1:
-            q = 0.99999999
+        q = np.clip(q, a_max=0.99999999)
         psi = self._psi(x, y, q, s)
         f_x = b / np.sqrt(1. - q ** 2) * np.arctan(np.sqrt(1. - q ** 2) * x / (psi + s))
         f_y = b / np.sqrt(1. - q ** 2) * np.arctanh(np.sqrt(1. - q ** 2) * y / (psi + q ** 2 * s))

@@ -2,7 +2,7 @@ __author__ = 'sibirrer'
 
 # this file contains a class which describes the surface brightness of the light models
 
-import numpy as np
+import jax.numpy as np
 from lenstronomy.Util.util import convert_bool_list
 
 __all__ = ['LightModelBase']

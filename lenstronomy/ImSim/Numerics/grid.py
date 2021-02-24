@@ -1,4 +1,5 @@
-import numpy as np
+import jax.numpy as np
+from jax import ops  # Try to avoid index updates eventually
 from lenstronomy.Util import util
 from lenstronomy.Util import image_util
 from lenstronomy.Data.coord_transforms import Coordinates1D
@@ -258,8 +259,9 @@ class RegularGrid(Coordinates1D):
         :param ny: y-axis of 2d grid
         :return:
         """
+        # TODO: Find a better way than ops.index_update()
         nx, ny = self._nx * self._supersampling_factor, self._ny * self._supersampling_factor
         grid1d = np.zeros((nx * ny))
-        grid1d[self._compute_indexes] = array
-        grid2d = util.array2image(grid1d, nx, ny)
-        return grid2d
+        indices = np.arange(nx * ny)[self._compute_indexes]
+        grid1d = ops.index_update(grid1d, ops.index[indices], array)
+        return util.array2image(grid1d, nx, ny)
