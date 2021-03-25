@@ -8,6 +8,8 @@ from lenstronomy.PointSource.point_source import PointSource
 from lenstronomy.ImSim.differential_extinction import DifferentialExtinction
 from lenstronomy.Util import util
 
+import functools
+from jax import jit
 import numpy as np
 
 __all__ = ['ImageModel']
@@ -115,14 +117,14 @@ class ImageModel(object):
         if len(self.SourceModel.profile_type_list) == 0:
             return np.zeros((self.Data.num_pixel_axes))
         if self._pixelbased_bool is True:
-            return self._source_surface_brightness_pixelbased(kwargs_source, kwargs_lens=kwargs_lens, 
-                                                       kwargs_extinction=kwargs_extinction, 
+            return self._source_surface_brightness_pixelbased(kwargs_source, kwargs_lens=kwargs_lens,
+                                                       kwargs_extinction=kwargs_extinction,
                                                        kwargs_special=kwargs_special,
                                                        unconvolved=unconvolved, de_lensed=de_lensed, k=k,
                                                        update_mapping=update_pixelbased_mapping)
         else:
-            return self._source_surface_brightness_analytical(kwargs_source, kwargs_lens=kwargs_lens, 
-                                                       kwargs_extinction=kwargs_extinction, 
+            return self._source_surface_brightness_analytical(kwargs_source, kwargs_lens=kwargs_lens,
+                                                       kwargs_extinction=kwargs_extinction,
                                                        kwargs_special=kwargs_special,
                                                        unconvolved=unconvolved, de_lensed=de_lensed, k=k)
 
@@ -161,7 +163,7 @@ class ImageModel(object):
         :param unconvolved: if True: returns the unconvolved light distribution (prefect seeing)
         :param de_lensed: if True: returns the un-lensed source surface brightness profile, otherwise the lensed.
         :param k: integer, if set, will only return the model of the specific index
-        :param update_mapping: if False, prevent the pixelated lensing mapping to be updated (saves computation time if previously computed). 
+        :param update_mapping: if False, prevent the pixelated lensing mapping to be updated (saves computation time if previously computed).
         :return: 2d array of surface brightness pixels
         """
         ra_grid, dec_grid = self.SourceNumerics.coordinates_evaluate
@@ -238,6 +240,7 @@ class ImageModel(object):
         point_source_image += self.ImageNumerics.point_source_rendering(ra_pos, dec_pos, amp)
         return point_source_image
 
+    @functools.partial(jit, static_argnums=(0,))
     def image(self, kwargs_lens=None, kwargs_source=None, kwargs_lens_light=None, kwargs_ps=None,
               kwargs_extinction=None, kwargs_special=None, unconvolved=False, source_add=True, lens_light_add=True, point_source_add=True):
         """

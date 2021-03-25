@@ -1,6 +1,8 @@
 __author__ = 'sibirrer'
 
-import numpy as np
+import numpy
+import jax.numpy as np
+from jax import random
 from scipy import ndimage
 from scipy import interpolate
 from scipy.ndimage import interpolation as interp
@@ -78,8 +80,12 @@ def add_background(image, sigma_bkd):
     :param sigma_bkd: background noise (sigma)
     :return: a realisation of Gaussian noise of the same size as image
     """
+    # # JAX pseudo-random number generator key
+    # key, subkey = random.split(random.PRNGKey(42))
+    # background = random.normal(subkey, shape=np.shape(image)) * sigma_bkd
+    # return background
     nx, ny = np.shape(image)
-    background = np.random.randn(nx, ny) * sigma_bkd
+    background = numpy.random.randn(nx, ny) * sigma_bkd
     return background
 
 
@@ -95,9 +101,14 @@ def add_poisson(image, exp_time):
     adds a poison (or Gaussian) distributed noise with mean given by surface brightness
     """
 
+    # sigma = np.sqrt(np.abs(image) / exp_time) # Gaussian approximation for Poisson distribution, normalized to exposure time
+    # # JAX pseudo-random number generator key
+    # key, subkey = random.split(random.PRNGKey(42))
+    # poisson = random.normal(subkey, shape=np.shape(image)) * sigma
+    # return poisson
     sigma = np.sqrt(np.abs(image)/exp_time) # Gaussian approximation for Poisson distribution, normalized to exposure time
     nx, ny = np.shape(image)
-    poisson = np.random.randn(nx, ny) * sigma
+    poisson = numpy.random.randn(nx, ny) * sigma
     return poisson
 
 

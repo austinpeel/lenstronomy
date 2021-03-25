@@ -7,7 +7,8 @@ this file contains standard routines
 import jax.numpy as np
 import mpmath
 import itertools
-from lenstronomy.Util.numba_util import jit
+# from lenstronomy.Util.numba_util import jit
+from jax import jit
 from lenstronomy.Util.package_util import exporter
 
 export, __all__ = exporter()
@@ -79,7 +80,7 @@ def sort_image_index(ximg, yimg, xref, yref):
 
 
 @export
-@jit()
+@jit
 def rotate(xcoords, ycoords, angle):
     """
 
@@ -197,20 +198,27 @@ def make_grid(numPix, deltapix, subgrid_res=1, left_lower=False):
         assert len(numPix) == 2
         if any(x != round(x) for x in numPix):
             raise ValueError("numPix contains non-integers: %s" % numPix)
-        numPix = np.asarray(numPix, dtype=np.int)
+        numPix = np.asarray(numPix, dtype=int)
     else:
         if numPix != round(numPix):
             raise ValueError("Attempt to specify non-int numPix: %s" % numPix)
-        numPix = np.array([numPix, numPix], dtype=np.int)
+        numPix = np.array([numPix, numPix], dtype=int)
 
     # Super-resolution sampling
-    numPix_eff = (numPix * subgrid_res).astype(np.int)
+    numPix_eff = (numPix * subgrid_res).astype(int)
     deltapix_eff = deltapix / float(subgrid_res)
 
     # Compute unshifted grids.
     # X values change quickly, Y values are repeated many times
-    x_grid = np.tile(np.arange(numPix_eff[0]), numPix_eff[1]) * deltapix_eff
-    y_grid = np.repeat(np.arange(numPix_eff[1]), numPix_eff[0]) * deltapix_eff
+    # NOTE jax.numpy.tile checks if `reps` is of type int, but numpy.int64
+    #      is not in fact this type. Simply casting as int(numPix_eff[1])
+    #      causes problems elsewhere with jax tracing, so we use another approach
+    # x_grid = np.tile(np.arange(numPix_eff[0]), numPix_eff[1]) * deltapix_eff
+    # y_grid = np.repeat(np.arange(numPix_eff[1]), numPix_eff[0]) * deltapix_eff
+    x_space = np.arange(numPix_eff[0]) * deltapix_eff
+    y_space = np.arange(numPix_eff[1]) * deltapix_eff
+    x_grid, y_grid = np.meshgrid(x_space, y_space)
+    x_grid, y_grid = x_grid.flatten(), y_grid.flatten()
 
     if left_lower is True:
         # Shift so (0, 0) is in the "lower left"
@@ -479,7 +487,7 @@ def points_on_circle(radius, num_points, connect_ends=True):
 
 
 @export
-@jit()
+# @jit  NOTE jax has trouble with jitting the for loop
 def neighborSelect(a, x, y):
     """
     #TODO replace by from scipy.signal import argrelextrema for speed up
