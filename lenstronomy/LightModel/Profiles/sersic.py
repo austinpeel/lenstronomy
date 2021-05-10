@@ -2,7 +2,7 @@ __author__ = 'sibirrer'
 
 #  this file contains a class to make a Sersic profile
 
-import numpy as np
+import jax.numpy as np
 from lenstronomy.LensModel.Profiles.sersic_utils import SersicUtil
 import lenstronomy.Util.param_util as param_util
 

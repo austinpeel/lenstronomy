@@ -1,7 +1,7 @@
 __author__ = 'sibirrer'
 
 import scipy.interpolate
-import numpy as np
+import jax.numpy as np
 
 import lenstronomy.Util.util as util
 
@@ -57,9 +57,10 @@ class Interpol(object):
             # Note that 'x' and 'y' in this block only refer to first and second
             # image array axes. Outside this block it is more complicated.
             nx, ny = np.shape(image)
-            image_bounds = np.zeros((nx + 2, ny + 2))
+            # image_bounds = np.zeros((nx + 2, ny + 2))
             nx0, ny0 = nx + 2, ny + 2
-            image_bounds[1:-1, 1:-1] = image
+            # image_bounds[1:-1, 1:-1] = image
+            image_bounds = np.pad(image, pad_width=1)  # avoid item assignment
             x_grid = np.linspace(start=-(nx0 - 1) / 2, stop=(nx0 - 1) / 2, num=nx0)
             y_grid = np.linspace(start=-(ny0 - 1) / 2, stop=(ny0 - 1) / 2, num=ny0)
             self._image_interp = scipy.interpolate.RectBivariateSpline(x_grid, y_grid, image_bounds, kx=1, ky=1, s=0)
