@@ -1,5 +1,7 @@
-from scipy import fftpack, ndimage, signal
-import numpy as np
+from scipy import fftpack #, ndimage, signal
+import jax.numpy as np
+from jax.scipy import signal
+from lenstronomy.Util.jax_util import GaussianFilter
 import threading
 #from scipy._lib._version import NumpyVersion
 _rfft_mt_safe = True  # (NumpyVersion(np.__version__) >= '1.9.0.dev-e24486e')
@@ -53,7 +55,7 @@ class PixelKernelConvolution(object):
 
     def copy_transpose(self):
         """
-        
+
         :return: copy of the class with kernel set to the transpose of original one
         """
         return PixelKernelConvolution(self._kernel.T, convolution_type=self._type)
@@ -240,8 +242,8 @@ class SubgridKernelConvolution(object):
 class MultiGaussianConvolution(object):
     """
     class to perform a convolution consisting of multiple 2d Gaussians
-    This is aimed to lead to a speed-up without significant loss of accuracy do to the simplified convolution kernel
-    relative to a pixelized kernel.
+    This is aimed to lead to a speed-up without significant loss of accuracy due
+    to the simplified convolution kernel relative to a pixelized kernel.
     """
 
     def __init__(self, sigma_list, fraction_list, pixel_scale, supersampling_factor=1, supersampling_convolution=False,
@@ -258,12 +260,15 @@ class MultiGaussianConvolution(object):
         self._sigmas_scaled = np.array(sigma_list) / pixel_scale
         if supersampling_convolution is True:
             self._sigmas_scaled *= supersampling_factor
-        self._fraction_list = fraction_list / np.sum(fraction_list)
+        self._fraction_list = np.array(fraction_list) / sum(fraction_list)
         assert len(self._sigmas_scaled) == len(self._fraction_list)
         self._truncation = truncation
         self._pixel_scale = pixel_scale
         self._supersampling_factor = supersampling_factor
         self._supersampling_convolution = supersampling_convolution
+
+        self._gaussian_filters = [GaussianFilter(sigma, self._truncation)
+                                  for sigma in self._sigmas_scaled]
 
     def convolution2d(self, image):
         """
@@ -272,14 +277,19 @@ class MultiGaussianConvolution(object):
         :param image: 2d numpy array, image to be convolved
         :return: convolved image, 2d numpy array
         """
-        image_conv = None
-        for i in range(self._num_gaussians):
-            if image_conv is None:
-                image_conv = ndimage.filters.gaussian_filter(image, self._sigmas_scaled[i], mode='nearest',
-                                                             truncate=self._truncation) * self._fraction_list[i]
-            else:
-                image_conv += ndimage.filters.gaussian_filter(image, self._sigmas_scaled[i], mode='nearest',
-                                                              truncate=self._truncation) * self._fraction_list[i]
+        # image_conv = None
+        # for i in range(self._num_gaussians):
+        #     if image_conv is None:
+        #         image_conv = ndimage.filters.gaussian_filter(image, self._sigmas_scaled[i], mode='nearest',
+        #                                                      truncate=self._truncation) * self._fraction_list[i]
+        #     else:
+        #         image_conv += ndimage.filters.gaussian_filter(image, self._sigmas_scaled[i], mode='nearest',
+        #                                                       truncate=self._truncation) * self._fraction_list[i]
+
+        image_conv = self._gaussian_filters[0](image) * self._fraction_list[0]
+        for i in range(1, self._num_gaussians):
+            image_conv += self._gaussian_filters[i](image) * self._fraction_list[i]
+
         return image_conv
 
     def re_size_convolve(self, image_low_res, image_high_res):
@@ -322,8 +332,10 @@ class FWHMGaussianConvolution(object):
         :param truncation: sigma scaling of kernel truncation
         """
         fwhm = kernel_util.fwhm_kernel(kernel)
-        self._sigma = util.fwhm2sigma(fwhm)
-        self._truncation = truncation
+        # self._sigma = util.fwhm2sigma(fwhm)
+        # self._truncation = truncation
+        sigma = util.fwhm2sigma(fwhm)
+        self.gaussian_filter = GaussianFilter(sigma, truncation)
 
     def convolution2d(self, image):
         """
@@ -333,7 +345,8 @@ class FWHMGaussianConvolution(object):
         :return: convolved image, 2d numpy array
         """
 
-        image_conv = ndimage.filters.gaussian_filter(image, self._sigma, mode='nearest', truncate=self._truncation)
+        # image_conv = ndimage.filters.gaussian_filter(image, self._sigma, mode='nearest', truncate=self._truncation)
+        image_conv = self.gaussian_filter(image)
         return image_conv
 
 

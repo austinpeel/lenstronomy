@@ -242,7 +242,8 @@ class ImageModel(object):
 
     @functools.partial(jit, static_argnums=(0,))
     def image(self, kwargs_lens=None, kwargs_source=None, kwargs_lens_light=None, kwargs_ps=None,
-              kwargs_extinction=None, kwargs_special=None, unconvolved=False, source_add=True, lens_light_add=True, point_source_add=True):
+              kwargs_extinction=None, kwargs_special=None, unconvolved=False, source_add=True,
+              lens_light_add=True, point_source_add=True):
         """
 
         make an image with a realisation of linear parameter values "param"

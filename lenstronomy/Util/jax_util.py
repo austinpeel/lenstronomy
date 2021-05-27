@@ -4,6 +4,8 @@ import functools
 import jax.numpy as np
 from jax import jit, vmap
 from jax.scipy.special import gammaln
+from jax.scipy.signal import convolve2d
+from jax.scipy.stats import norm
 from jax.lax import conv_general_dilated, conv_dimension_numbers
 
 
@@ -36,6 +38,101 @@ class special(object):
         sign_condition = (x > 0) | (np.ceil(x) % 2 != 0) | (x % 2 == 0)
         sign = 2 * np.asarray(sign_condition, dtype=float) - 1
         return sign * np.exp(gammaln(x))
+
+
+# def gaussian_filter(image, sigma, mode='nearest', truncate=4.0):
+#     """Convolve an image by a gaussian filter.
+#
+#     Parameters
+#     ----------
+#     image : array_like
+#         Image to filter.
+#     sigma : float
+#         Standard deviation of the Gaussian kernel.
+#     mode : str, {'constant', 'nearest'}
+#         How the input array is extended when the filter overlaps a border.
+#         See the `scipy.ndimage.gaussian_filter` documentation.
+#         Default is 'nearest'.
+#     truncate : float, optional
+#         Truncate the filter at this many standard deviations. Default is 4.0.
+#
+#     Note
+#     ----
+#     Reproduces `scipy.ndimage.gaussian_filter` well with mode options
+#     'constant' and 'nearest'.
+#
+#     """
+#     def gaussian(x, sigma):
+#         y = np.asarray(x, dtype=float) / sigma
+#         return np.exp(-0.5 * y**2) / (2 * np.pi * sigma**2)
+#
+#     # Determine the kernel size (rounded up to an odd int) based on truncation
+#     N = int(np.ceil(2 * truncate * sigma) // 2 * 2 + 1)
+#
+#     # Don't convolve if kernel is only one pixel
+#     # if N < 3:
+#     #     return image
+#
+#     # Compute the kernel
+#     x, y = np.indices((N, N))  # pixel coordinates
+#     x0, y0 = (N - 1) / 2., (N - 1) / 2.  # center pixel
+#     kernel = gaussian(np.hypot(x - x0, y - y0), sigma)
+#
+#     # Convolve
+#     pad_mode = ['constant', 'edge'][mode == 'nearest']
+#     image_padded = np.pad(image, pad_width=(N // 2), mode=pad_mode)
+#     return convolve2d(image_padded, kernel, mode='valid')
+
+class GaussianFilter(object):
+    """JAX-friendly Gaussian filter."""
+    def __init__(self, sigma, truncate=4.0):
+        """Convolve an image by a gaussian filter.
+
+        Parameters
+        ----------
+        sigma : float
+            Standard deviation of the Gaussian kernel.
+        truncate : float, optional
+            Truncate the filter at this many standard deviations.
+            Default is 4.0.
+
+        Note
+        ----
+        Reproduces `scipy.ndimage.gaussian_filter` with high accuracy.
+
+        """
+        self.kernel = self.gaussian_kernel(sigma, truncate)
+
+    def gaussian_kernel(self, sigma, truncate):
+        # Determine the kernel pixel size (rounded up to an odd int)
+        self.radius = int(np.ceil(2 * truncate * sigma)) // 2
+        npix = self.radius * 2 + 1  # always at least 1
+
+        # Return the identity if sigma is not a positive number
+        if sigma <= 0:
+            return np.array([[1.]])
+
+        # Compute the kernel
+        x, y = np.indices((npix, npix))  # pixel coordinates
+        kernel = norm.pdf(np.hypot(x - self.radius, y - self.radius) / sigma)
+        kernel /= kernel.sum()
+
+        return kernel
+
+    @functools.partial(jit, static_argnums=(0,))
+    def __call__(self, image):
+        """Jit-compiled convolution an image by a gaussian filter.
+
+        Parameters
+        ----------
+        image : array_like
+            Image to filter.
+        """
+        # Convolve
+        # pad_mode = ['constant', 'edge'][mode == 'nearest']
+        # image_padded = np.pad(image, pad_width=radius, mode=pad_mode)
+        image_padded = np.pad(image, pad_width=self.radius, mode='edge')
+        return convolve2d(image_padded, self.kernel, mode='valid')
 
 
 @functools.partial(jit, static_argnums=(1,))

@@ -1,7 +1,8 @@
 from lenstronomy.ImSim.image_model import ImageModel
 import lenstronomy.ImSim.de_lens as de_lens
 from lenstronomy.Util import util
-import numpy as np
+import jax.numpy as np
+from jax.ops import index, index_update
 
 __all__ = ['ImageLinearFit']
 
@@ -9,13 +10,13 @@ __all__ = ['ImageLinearFit']
 class ImageLinearFit(ImageModel):
     """
     linear version class, inherits ImageModel.
-    
-    When light models use pixel-based profile types, such as 'SLIT_STARLETS', 
+
+    When light models use pixel-based profile types, such as 'SLIT_STARLETS',
     the WLS linear inversion is replaced by the regularized inversion performed by an external solver.
     The current pixel-based solver is provided by the SLITronomy plug-in.
     """
     def __init__(self, data_class, psf_class=None, lens_model_class=None, source_model_class=None,
-                 lens_light_model_class=None, point_source_class=None, extinction_class=None, 
+                 lens_light_model_class=None, point_source_class=None, extinction_class=None,
                  kwargs_numerics={}, likelihood_mask=None,
                  psf_error_map_bool_list=None, kwargs_pixelbased=None):
         """
@@ -40,7 +41,7 @@ class ImageLinearFit(ImageModel):
         super(ImageLinearFit, self).__init__(data_class, psf_class=psf_class, lens_model_class=lens_model_class,
                                              source_model_class=source_model_class,
                                              lens_light_model_class=lens_light_model_class,
-                                             point_source_class=point_source_class, extinction_class=extinction_class, 
+                                             point_source_class=point_source_class, extinction_class=extinction_class,
                                              kwargs_numerics=kwargs_numerics, kwargs_pixelbased=kwargs_pixelbased)
         if psf_error_map_bool_list is None:
             psf_error_map_bool_list = [True] * len(self.PointSource.point_source_type_list)
@@ -56,7 +57,7 @@ class ImageLinearFit(ImageModel):
         computes the image (lens and source surface brightness with a given lens model).
         The linear parameters are computed with a weighted linear least square optimization (i.e. flux normalization of the brightness profiles)
         However in case of pixel-based modelling, pixel values are constrained by an external solver (e.g. SLITronomy).
-        
+
         :param kwargs_lens: list of keyword arguments corresponding to the superposition of different lens profiles
         :param kwargs_source: list of keyword arguments corresponding to the superposition of different source light profiles
         :param kwargs_lens_light: list of keyword arguments corresponding to different lens light surface brightness profiles
@@ -84,8 +85,8 @@ class ImageLinearFit(ImageModel):
         :return: 2d array of surface brightness pixels of the optimal solution of the linear parameters to match the data
         """
         if self._pixelbased_bool is True:
-            model, model_error, cov_param, param = self.image_pixelbased_solve(kwargs_lens, kwargs_source, 
-                                                                               kwargs_lens_light, kwargs_ps, 
+            model, model_error, cov_param, param = self.image_pixelbased_solve(kwargs_lens, kwargs_source,
+                                                                               kwargs_lens_light, kwargs_ps,
                                                                                kwargs_extinction, kwargs_special)
         else:
             A = self._linear_response_matrix(kwargs_lens, kwargs_source, kwargs_lens_light, kwargs_ps, kwargs_extinction, kwargs_special)
@@ -96,8 +97,8 @@ class ImageLinearFit(ImageModel):
             _, _, _, _ = self.update_linear_kwargs(param, kwargs_lens, kwargs_source, kwargs_lens_light, kwargs_ps)
         return model, model_error, cov_param, param
 
-    def image_pixelbased_solve(self, kwargs_lens=None, kwargs_source=None, kwargs_lens_light=None, 
-                               kwargs_ps=None, kwargs_extinction=None, kwargs_special=None, 
+    def image_pixelbased_solve(self, kwargs_lens=None, kwargs_source=None, kwargs_lens_light=None,
+                               kwargs_ps=None, kwargs_extinction=None, kwargs_special=None,
                                init_lens_light_model=None):
         """
         computes the image (lens and source surface brightness with a given lens model) using the pixel-based solver.
@@ -266,6 +267,7 @@ class ImageLinearFit(ImageModel):
         ra_pos, dec_pos, amp, n_points = self.point_source_linear_response_set(kwargs_ps, kwargs_lens, kwargs_special, with_amp=False)
         num_param = n_points + n_lens_light + n_source
 
+        # TODO Avoid index assignment for JAX
         num_response = self.num_data_evaluate
         A = np.zeros((num_param, num_response))
         n = 0
@@ -274,18 +276,21 @@ class ImageLinearFit(ImageModel):
             image = source_light_response[i]
             image *= extinction
             image = self.ImageNumerics.re_size_convolve(image, unconvolved=unconvolved)
-            A[n, :] = np.nan_to_num(self.image2array_masked(image), copy=False)
+            # A[n, :] = np.nan_to_num(self.image2array_masked(image), copy=False)
+            index_update(A, index[n, :], np.nan_to_num(self.image2array_masked(image), copy=False))
             n += 1
         # response of lens light profile
         for i in range(0, n_lens_light):
             image = lens_light_response[i]
             image = self.ImageNumerics.re_size_convolve(image, unconvolved=unconvolved)
-            A[n, :] = np.nan_to_num(self.image2array_masked(image), copy=False)
+            # A[n, :] = np.nan_to_num(self.image2array_masked(image), copy=False)
+            index_update(A, index[n, :], np.nan_to_num(self.image2array_masked(image), copy=False))
             n += 1
         # response of point sources
         for i in range(0, n_points):
             image = self.ImageNumerics.point_source_rendering(ra_pos[i], dec_pos[i], amp[i])
-            A[n, :] = np.nan_to_num(self.image2array_masked(image), copy=False)
+            # A[n, :] = np.nan_to_num(self.image2array_masked(image), copy=False)
+            index_update(A, index[n, :], np.nan_to_num(self.image2array_masked(image), copy=False))
             n += 1
         return A
 
@@ -384,7 +389,9 @@ class ImageLinearFit(ImageModel):
         """
         nx, ny = self.Data.num_pixel_axes
         grid1d = np.zeros(nx * ny)
-        grid1d[self._mask1d] = array
+        # grid1d[self._mask1d] = array
+        # TODO need to do this more efficiently !!
+        index_update(grid1d, index[self._mask1d], array)
         grid2d = util.array2image(grid1d, nx, ny)
         return grid2d
 
@@ -480,7 +487,7 @@ class ImageLinearFit(ImageModel):
         """
         pos_bool_ps = self.PointSource.check_positive_flux(kwargs_ps)
         if self._pixelbased_bool is True:
-            # this constraint must be handled by the pixel-based solver 
+            # this constraint must be handled by the pixel-based solver
             pos_bool_source = True
             pos_bool_lens_light = True
         else:
